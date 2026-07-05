@@ -337,7 +337,51 @@ Above  test can be repeated for any pair of DGX Spark. Description of each param
 - 8 QPs connect
 - line-rate confirmed
 
+**Full Mesh IB_Write Test**
+```bash
+cat > full_mesh_ib_wr.sh <<'EOF'
+#!/bin/bash
+#
+# Sequential full-mesh RDMA bandwidth validation using ib_write_bw.
+# Every node communicates with every other node.
+#
 
+NODES=(192.168.100.10 192.168.100.11 192.168.100.12 192.168.100.13)
+
+DEV=rocep1s0f0
+PORT=1
+GID=3              # RoCEv2 GID index
+SIZE=1048576       # 1 MiB message
+SSH="ssh -o StrictHostKeyChecking=no"
+
+for srv in "${NODES[@]}"; do
+  for cli in "${NODES[@]}"; do
+    [ "$srv" = "$cli" ] && continue
+
+    echo
+    echo "=== Server: $srv   Client: $cli ==="
+
+    $SSH "$srv" "ib_write_bw -d $DEV -i $PORT -F --report_gbits -x $GID -s $SIZE" &
+    sleep 2
+
+    $SSH "$cli" "ib_write_bw -d $DEV -i $PORT -F --report_gbits -x $GID -s $SIZE $srv" \
+      | tee "result_${srv}_${cli}.txt"
+
+    wait
+    sleep 1
+  done
+done
+
+echo
+echo "Full-mesh RDMA bandwidth validation completed."
+EOF
+```
+Execute the above script 
+
+``bash
+chmod +x full_mesh_ib_wr.sh
+./full_mesh_ib_wr.sh
+```
 
 ### NCCL Testing 
 #### NCCL Environment Variables
