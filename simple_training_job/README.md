@@ -6,11 +6,11 @@ We have also learned how to perform NCCL performance testing using various colle
 It assumes:
 
 - Cluster setup is completed.
-- Reader has working knowladge  of Linux. 
-- Reader has working knowladge  python programming. 
-- Reader has working knowladge of NCCL Collective Operations
+- Reader has working knowladge of Linux. 
+- Reader has working knowladge python. 
+- Reader has working knowladge of NCCL Collective Operations.
 
-**Reference**
+**References**
 [DGX-Spark 4 Nodes Cluster Setup](https://github.com/kashif-nawaz/DGX-Spark/tree/main/Cluster-Setup)
 [NCCL Collective Operations](https://www.linkedin.com/pulse/what-every-network-engineer-needs-know-ai-traffic-technical-nawaz--eujxc/?trackingId=taRMzXp%2FQ364WD6kqwB2hw%3D%3D)
 
