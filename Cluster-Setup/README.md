@@ -8,9 +8,9 @@ across a multi-switch topology.
 The DGX Spark is built on the NVIDIA GB10 Grace Blackwell Superchip. Its CPU is a 20-core Arm Grace processor (10 Cortex-X925 performance cores and 10 Cortex-A725 efficiency cores). The Grace CPU and Blackwell GPU are joined by NVLink-C2C, a wide, cache-coherent chip-to-chip interconnect (~900 GB/s class) that gives both a single unified memory space, so instead of the slower PCIe link and separate memory pools of a normal PC, there is no copy bottleneck and the GPU can address the full 128 GB of unified memory, letting these boxes hold much larger models than the raw GPU memory alone would allow.
 On the networking side, the external I/O comes from two dual-port ConnectX-7 NICs (HCA0 and HCA1), each connected to the Grace SoC over its own PCIe Gen5 x4 link. Each HCA has two 100G ports that share its single PCIe Gen5 x4 link. Each Gen5 x4 link max throughput is ~126 Gb/s per direction, so two HCAs give roughly ~252 Gb/s in theory, and with different overheads the sustained rate is about 200–220 Gb/s. Below diagram shows the internal connectivity architecture  of a DGX-Spark machine.
   
-                                                                           ![DGX-Spark](./images/DGX-Spark.png)
+![DGX-Spark](./images/DGX-Spark.png)
 
-# Hardware
+# Testbed Setup 
 - 4 × NVIDIA DGX Spark
 - NVIDIA ConnectX-7 Adapters (Dual 200G Ports per Node)
 - Multi-Switch Topology (Juniper PTX10002-36QDD)
