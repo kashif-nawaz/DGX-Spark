@@ -255,10 +255,10 @@ hostname
 Example Output
 
 ```bash
-rtme-nvidia-spark-dgx-01
-rtme-nvidia-spark-dgx-02
-rtme-nvidia-spark-dgx-03
-rtme-nvidia-spark-dgx-04
+nvidia-spark-dgx-01
+nvidia-spark-dgx-02
+nvidia-spark-dgx-03
+nvidia-spark-dgx-04
 ```
 
 **Validated:**
