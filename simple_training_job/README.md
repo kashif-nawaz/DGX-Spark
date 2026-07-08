@@ -233,7 +233,7 @@ torchrun \
 Every node prints (the number before the slash is that node's rank):
 
 **Node 0:**
-````bash
+```bash
 NCCL version 2.29.7+cuda13.2
 rank 0/4 all_reduce result = 6.0
 ```
@@ -244,7 +244,7 @@ rank 1/4 all_reduce result = 6.0
 ```
 
 **Node 2:**
-````bash
+```bash
 rank 2/4 all_reduce result = 6.0
 ```
 **Node 3:**
