@@ -262,7 +262,6 @@ Above results confirm that cluster is validated with following explanation.
 - `/4` — all four nodes joined ONE group.
 - `6.0` — the sum across all four ranks is correct.
 
----
 
 ## Run a real multi-node training job
 
