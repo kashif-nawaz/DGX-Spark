@@ -239,7 +239,7 @@ rank 0/4 all_reduce result = 6.0
 ```
 
 **Node 1:**
-````bash
+```bash
 rank 1/4 all_reduce result = 6.0
 ```
 
