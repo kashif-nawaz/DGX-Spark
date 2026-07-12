@@ -1,4 +1,4 @@
-# Multi-Node Fine-Tuning (LoRA) of Llama3 8B on a 4-Node DGX Spark Cluster
+#  Llama 3 8B on a 4-Node DGX Spark Cluster: LoRA Fine-Tuning and Inference
 
 The previous documents covered cluster setup, NCCL performance testing, and a simple multi node training job on synthetic data. This guide extends that work to fine-tuning a production large language model, Llama 3 8B, across all 4 nodes. The entire workflow runs without a job scheduler and without shared storage, using only the 4 DGX Spark nodes.
 
