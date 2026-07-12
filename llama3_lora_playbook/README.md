@@ -18,7 +18,7 @@ Every abbreviation is expanded on first use and collected in the Glossary at the
 
 This guide demonstrates two distinct activities: training a model and running inference with it. They are different operations with different requirements, and understanding the difference is the foundation for everything that follows. The summary above shows the full picture at a glance; the sections that follow explain each part.
 
-### What training is
+###  Training
 
 Training is the process of teaching the model. It runs the same short cycle repeatedly, once per batch of examples, and each cycle is called a training step. A single step has five parts.
 
@@ -42,15 +42,37 @@ A model like Llama 3 8B is built in two stages.
 **Fine-Tuning** Fine-tuning is the second, much smaller stage, and is what this guide performs. It takes the already pre-trained model and adjusts it on a small, focused dataset so its behaviour shifts toward a desired style or task. It is fast and inexpensive by comparison, minutes rather than weeks, because the model already knows language and only needs nudging.
 In short, pre-training builds general ability from nothing, and fine-tuning specialises it. This guide only fine-tunes.
 
-### Training data
+### Training Data
 Fine-tuning needs examples to learn from. This guide uses Dolly, a public dataset of about 15,000 human-written question and answer pairs, published by Databricks and general in topic. A small slice of 2,000 examples is used to keep the first run short.
 The dataset is what decides what the model learns, because the model moves toward the pattern in the examples it is shown. Since Dolly is general and the slice is small, the result is a shift in the model's answering style rather than new factual knowledge. Training on a different dataset, in the same question and answer format, is how the model would be pointed at a specific domain.
 
-### When the model is considered trained
+## Completion of Training 
 
 The five-step cycle repeats for every batch in the dataset, and the whole dataset can be passed through more than once. Each full pass over the dataset is called an epoch. As the steps accumulate, the loss trends downward, which is the visible sign that the model is improving. The model is considered trained when this process finishes, at which point its learned values are saved to disk. In this guide, that saved result is the adapter, described below.
 
-### What inference is
+##  Memory and the Hardware Constraint
+
+The reason LoRA is used, rather than full training, comes down to memory. This is the single most important point in the guide.
+
+Training memory is not limited to the model itself. As the training loop shows, several items must reside in memory at once, and they are linked. Every trainable parameter has a corresponding gradient tensor, and every gradient needs optimizer state. So the total memory bill is driven by the number of parameters that are trained.
+
+![Training memory](images/memory.png)
+
+The table below shows the approximate cost of fully training all 8 billion parameters, and the meaning of each item.
+
+| Item | Approximate size | Description |
+| --- | --- | --- |
+| Parameters | 16 GB | The 8 billion model numbers, stored in a compact 2 byte format called bfloat16 (bf16). 8 billion multiplied by 2 bytes is about 16 GB. |
+| Gradients | 16 GB | One value per trained parameter indicating the direction to adjust it. Same count as the parameters, so the same size. |
+| Optimizer state | 64 GB | AdamW stores two bookkeeping numbers per trained parameter in a larger 4 byte format called float32 (fp32). 8 billion multiplied by 2 numbers multiplied by 4 bytes is about 64 GB. |
+| Activations | tens of GB | Temporary intermediate results produced during the forward pass. |
+
+The total for full training is roughly 96 GB before activations, on a machine that must also run its operating system. A DGX Spark node provides 128 GB of memory shared between the processor and the graphics processing unit (GPU). Full training is therefore not feasible with a plain approach.
+
+LoRA removes almost all of this cost. Because the original parameters are frozen, they have no gradients and no optimizer state. Only the small adapter has gradients and optimizer state. The training footprint drops from roughly 96 GB to little more than the 16 GB of frozen parameters, which fits on a single DGX Spark node.
+
+This produces a useful simplification. Because the workload fits on one node, no model-splitting technique is required. The same method from the previous guide applies: Distributed Data Parallel (DDP), in which every node holds a full copy of the frozen model plus its own copy of the small adapter, and the nodes exchange only the small adapter updates. This is the largest simplification for a first production run.
+### Inference 
 
 Inference is using the finished model to answer questions. It is much simpler than training because it performs only the first step of the cycle, the forward pass. An input goes in, the model runs forward, and an answer comes out. There is no loss calculation, no backward pass, no gradient exchange, and no optimizer step, because nothing is being learned. The model is only being used.
 
@@ -58,7 +80,7 @@ Inference is using the finished model to answer questions. It is much simpler th
 
 This simplicity has a practical consequence. Training is heavy and benefits from all four nodes working together. Inference is light and runs on a single node. Because Llama 3 8B fits comfortably on one GB10, inference here uses one node, one GPU, and no collective communication at all. A collective such as all-gather or all-reduce would only be needed if a model were too large for a single GPU and had to be split across several, which is not the case here.
 
-### What the adapter is
+### Low-Rank Adaptation (LoRA)
 
 The model in this guide is not trained in full. It is trained using LoRA, which stands for Low-Rank Adaptation. LoRA leaves the original 8 billion parameters of Llama 3 8B frozen and unchanged, and instead trains a small set of new parameters, about 42 million, called an adapter. The adapter is the only part that learns, and it is what gets saved. It is small, about 160 MB, compared to the 16 GB base model.
 
@@ -66,9 +88,9 @@ The model in this guide is not trained in full. It is trained using LoRA, which 
 
 The adapter is not a standalone model. It cannot answer anything on its own. It is a small layer that sits on top of the frozen base model. At inference, both are loaded together. The base model supplies the general language ability it already had, and the adapter supplies the new behaviour learned during training. Combined, they form the working fine-tuned model. This is why the base model must still be present at inference time, and why the trained result is only the small adapter rather than a full copy of the model.
 
-### The complete workflow
+### End-to-End Workflow
 
-Putting the two activities together, the workflow has five stages. The first three prepare and train. The last two produce and use the result.
+Putting the two activities together, the workflow has five stages. The first three prepare the dataset  and train the model. The last two stages produce and use the trained model.
 
 ![Pipeline overview](images/pipeline.png)
 
@@ -80,7 +102,7 @@ Putting the two activities together, the workflow has five stages. The first thr
 
 Stage 3 is the only stage that uses the RoCE fabric and NCCL. Stage 5 runs the finished model on a single node and requires no distributed setup.
 
-## Concept: memory and the hardware constraint
+##  Memory and the Hardware Constraint
 
 The reason LoRA is used, rather than full training, comes down to memory. This is the single most important point in the guide.
 
