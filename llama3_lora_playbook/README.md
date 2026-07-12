@@ -36,6 +36,16 @@ Training is the process of teaching the model. It runs the same short cycle repe
 
 AdamW is the component that performs the actual parameter updates. Its name comes from Adaptive Moment Estimation with Weight Decay. In practical terms, it does two useful things beyond a naive update. First, it adapts the update size for each individual parameter based on the recent history of that parameter's gradients, so parameters that need large moves get large moves and stable parameters get small ones. Second, it applies a gentle pull toward smaller values, called weight decay, which helps prevent the model from over-fitting to the training data. To do this it keeps two bookkeeping numbers per trained parameter, which is why the optimizer is a significant consumer of memory, as shown later in the memory section.
 
+#### Pre-Training and Tine-tuning
+A model like Llama 3 8B is built in two stages.
+**Pre-Training** Pre-training is the first and much larger stage, done by the model's creator. The model reads an enormous amount of general text and learns language, facts, and reasoning from scratch. This needs huge datasets and large clusters running for weeks, at very high cost. The result is the base model downloaded from Hugging Face. Pre-training is not repeated here; the finished base model is the starting point.
+**Fine-Tuning** Fine-tuning is the second, much smaller stage, and is what this guide performs. It takes the already pre-trained model and adjusts it on a small, focused dataset so its behaviour shifts toward a desired style or task. It is fast and inexpensive by comparison, minutes rather than weeks, because the model already knows language and only needs nudging.
+In short, pre-training builds general ability from nothing, and fine-tuning specialises it. This guide only fine-tunes.
+
+### Training data
+Fine-tuning needs examples to learn from. This guide uses Dolly, a public dataset of about 15,000 human-written question and answer pairs, published by Databricks and general in topic. A small slice of 2,000 examples is used to keep the first run short.
+The dataset is what decides what the model learns, because the model moves toward the pattern in the examples it is shown. Since Dolly is general and the slice is small, the result is a shift in the model's answering style rather than new factual knowledge. Training on a different dataset, in the same question and answer format, is how the model would be pointed at a specific domain.
+
 ### When the model is considered trained
 
 The five-step cycle repeats for every batch in the dataset, and the whole dataset can be passed through more than once. Each full pass over the dataset is called an epoch. As the steps accumulate, the loss trends downward, which is the visible sign that the model is improving. The model is considered trained when this process finishes, at which point its learned values are saved to disk. In this guide, that saved result is the adapter, described below.
