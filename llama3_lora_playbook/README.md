@@ -74,7 +74,7 @@ Stage 3 is the only stage that uses the RoCE fabric and NCCL. Stage 5 runs the f
 
 The reason LoRA is used, rather than full training, comes down to memory. This is the single most important point in the guide.
 
-Training memory is not limited to the model itself. As the training loop shows, several items must reside in memory at once, and they are linked. Every trained parameter creates a gradient, and every gradient needs optimizer state. So the total memory bill is driven by the number of parameters that are trained.
+Training memory is not limited to the model itself. As the training loop shows, several items must reside in memory at once, and they are linked. Every trainable parameter has a corresponding gradient tensor, and every gradient needs optimizer state. So the total memory bill is driven by the number of parameters that are trained.
 
 ![Training memory](images/memory.png)
 
@@ -404,7 +404,7 @@ The output should include `adapter_model.safetensors` at approximately 160 MB, a
 
 ## Inference
 
-Fine-tuning produces a file. It does not by itself provide an interactive model. Querying the model requires the inference step described in the Overview, which runs only the forward pass. Inference runs on a single node with no cluster launch and no NCCL, because it only runs the model rather than training it.
+Fine-tuning produces a file. It does not by itself provide an interactive model. Querying the model requires the inference step described in the Overview, which runs only the forward pass. In this example, inference runs on a single node with no cluster launch and no NCCL because the full Llama 3 8B model fits on one GB10. Larger models, or inference configurations that intentionally split the model across GPUs, may require NCCL and distributed launch methods.
 
 The script below loads the base model, applies the adapter on top, and then accepts questions in sequence until `quit` is entered. Create it on node 0.
 
