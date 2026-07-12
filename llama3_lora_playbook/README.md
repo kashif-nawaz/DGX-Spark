@@ -13,10 +13,9 @@ Prerequisites:
 Every abbreviation is expanded on first use and collected in the Glossary at the end.
 
 ## Overview
+This guide demonstrates two distinct activities: training a model and running inference with it. They are different operations with different requirements, and understanding the difference is the foundation for everything that follows. The summary above shows the full picture at a glance; the sections that follow explain each part.
 
 ![Concept summary](images/hero.png)
-
-This guide demonstrates two distinct activities: training a model and running inference with it. They are different operations with different requirements, and understanding the difference is the foundation for everything that follows. The summary above shows the full picture at a glance; the sections that follow explain each part.
 
 ###  Training
 
@@ -36,7 +35,7 @@ Training is the process of teaching the model. It runs the same short cycle repe
 
 AdamW is the component that performs the actual parameter updates. Its name comes from Adaptive Moment Estimation with Weight Decay. In practical terms, it does two useful things beyond a naive update. First, it adapts the update size for each individual parameter based on the recent history of that parameter's gradients, so parameters that need large moves get large moves and stable parameters get small ones. Second, it applies a gentle pull toward smaller values, called weight decay, which helps prevent the model from over-fitting to the training data. To do this it keeps two bookkeeping numbers per trained parameter, which is why the optimizer is a significant consumer of memory, as shown later in the memory section.
 
-#### Pre-Training and Tine-tuning
+### Pre-Training and Fine-tuning
 A model like Llama 3 8B is built in two stages.
 **Pre-Training** Pre-training is the first and much larger stage, done by the model's creator. The model reads an enormous amount of general text and learns language, facts, and reasoning from scratch. This needs huge datasets and large clusters running for weeks, at very high cost. The result is the base model downloaded from Hugging Face. Pre-training is not repeated here; the finished base model is the starting point.
 **Fine-Tuning** Fine-tuning is the second, much smaller stage, and is what this guide performs. It takes the already pre-trained model and adjusts it on a small, focused dataset so its behaviour shifts toward a desired style or task. It is fast and inexpensive by comparison, minutes rather than weeks, because the model already knows language and only needs nudging.
@@ -46,32 +45,10 @@ In short, pre-training builds general ability from nothing, and fine-tuning spec
 Fine-tuning needs examples to learn from. This guide uses Dolly, a public dataset of about 15,000 human-written question and answer pairs, published by Databricks and general in topic. A small slice of 2,000 examples is used to keep the first run short.
 The dataset is what decides what the model learns, because the model moves toward the pattern in the examples it is shown. Since Dolly is general and the slice is small, the result is a shift in the model's answering style rather than new factual knowledge. Training on a different dataset, in the same question and answer format, is how the model would be pointed at a specific domain.
 
-## Completion of Training 
+### Completion of Training 
 
 The five-step cycle repeats for every batch in the dataset, and the whole dataset can be passed through more than once. Each full pass over the dataset is called an epoch. As the steps accumulate, the loss trends downward, which is the visible sign that the model is improving. The model is considered trained when this process finishes, at which point its learned values are saved to disk. In this guide, that saved result is the adapter, described below.
 
-##  Memory and the Hardware Constraint
-
-The reason LoRA is used, rather than full training, comes down to memory. This is the single most important point in the guide.
-
-Training memory is not limited to the model itself. As the training loop shows, several items must reside in memory at once, and they are linked. Every trainable parameter has a corresponding gradient tensor, and every gradient needs optimizer state. So the total memory bill is driven by the number of parameters that are trained.
-
-![Training memory](images/memory.png)
-
-The table below shows the approximate cost of fully training all 8 billion parameters, and the meaning of each item.
-
-| Item | Approximate size | Description |
-| --- | --- | --- |
-| Parameters | 16 GB | The 8 billion model numbers, stored in a compact 2 byte format called bfloat16 (bf16). 8 billion multiplied by 2 bytes is about 16 GB. |
-| Gradients | 16 GB | One value per trained parameter indicating the direction to adjust it. Same count as the parameters, so the same size. |
-| Optimizer state | 64 GB | AdamW stores two bookkeeping numbers per trained parameter in a larger 4 byte format called float32 (fp32). 8 billion multiplied by 2 numbers multiplied by 4 bytes is about 64 GB. |
-| Activations | tens of GB | Temporary intermediate results produced during the forward pass. |
-
-The total for full training is roughly 96 GB before activations, on a machine that must also run its operating system. A DGX Spark node provides 128 GB of memory shared between the processor and the graphics processing unit (GPU). Full training is therefore not feasible with a plain approach.
-
-LoRA removes almost all of this cost. Because the original parameters are frozen, they have no gradients and no optimizer state. Only the small adapter has gradients and optimizer state. The training footprint drops from roughly 96 GB to little more than the 16 GB of frozen parameters, which fits on a single DGX Spark node.
-
-This produces a useful simplification. Because the workload fits on one node, no model-splitting technique is required. The same method from the previous guide applies: Distributed Data Parallel (DDP), in which every node holds a full copy of the frozen model plus its own copy of the small adapter, and the nodes exchange only the small adapter updates. This is the largest simplification for a first production run.
 ### Inference 
 
 Inference is using the finished model to answer questions. It is much simpler than training because it performs only the first step of the cycle, the forward pass. An input goes in, the model runs forward, and an answer comes out. There is no loss calculation, no backward pass, no gradient exchange, and no optimizer step, because nothing is being learned. The model is only being used.
@@ -88,20 +65,6 @@ The model in this guide is not trained in full. It is trained using LoRA, which 
 
 The adapter is not a standalone model. It cannot answer anything on its own. It is a small layer that sits on top of the frozen base model. At inference, both are loaded together. The base model supplies the general language ability it already had, and the adapter supplies the new behaviour learned during training. Combined, they form the working fine-tuned model. This is why the base model must still be present at inference time, and why the trained result is only the small adapter rather than a full copy of the model.
 
-### End-to-End Workflow
-
-Putting the two activities together, the workflow has five stages. The first three prepare the dataset  and train the model. The last two stages produce and use the trained model.
-
-![Pipeline overview](images/pipeline.png)
-
-1. Environment setup, on all four nodes.
-2. Model access and download, on all four nodes.
-3. LoRA fine-tuning, across all four nodes, using the fabric for gradient exchange.
-4. The trained adapter is saved, on node 0.
-5. Inference, on a single node, combining the base model and the adapter.
-
-Stage 3 is the only stage that uses the RoCE fabric and NCCL. Stage 5 runs the finished model on a single node and requires no distributed setup.
-
 ##  Memory and the Hardware Constraint
 
 The reason LoRA is used, rather than full training, comes down to memory. This is the single most important point in the guide.
@@ -125,7 +88,22 @@ LoRA removes almost all of this cost. Because the original parameters are frozen
 
 This produces a useful simplification. Because the workload fits on one node, no model-splitting technique is required. The same method from the previous guide applies: Distributed Data Parallel (DDP), in which every node holds a full copy of the frozen model plus its own copy of the small adapter, and the nodes exchange only the small adapter updates. This is the largest simplification for a first production run.
 
-## Cluster details
+## End-to-End Workflow
+
+Putting the two activities together, the workflow has five stages. The first three prepare the dataset  and train the model. The last two stages produce and use the trained model.
+
+![Pipeline overview](images/pipeline.png)
+
+1. Environment setup, on all four nodes.
+2. Model access and download, on all four nodes.
+3. LoRA fine-tuning, across all four nodes, using the fabric for gradient exchange.
+4. The trained adapter is saved, on node 0.
+5. Inference, on a single node, combining the base model and the adapter.
+
+Stage 3 is the only stage that uses the RoCE fabric and NCCL. Stage 5 runs the finished model on a single node and requires no distributed setup.
+
+### Implementation and Testing 
+## Cluster Details
 
 Substitute local values wherever a placeholder appears.
 
@@ -140,7 +118,7 @@ Substitute local values wherever a placeholder appears.
 > Node 0 is the master that coordinates the group.
 > Each node receives its own rank number through `--node_rank` (0 on node 0, 1 on node 1, 2 on node 2, 3 on node 3).
 
-## Library installation
+### Library installation
 
 Perform on all 4 nodes.
 
@@ -170,7 +148,7 @@ The expected result is `all good` on all four nodes.
 
 > If a later training run fails immediately with `ModuleNotFoundError: No module named 'datasets'`, the installation did not complete in the active environment. Re-run the installation and re-check with the import test.
 
-## Model access
+### Model access
 
 Llama 3 is a gated model. The publisher, Meta, requires acceptance of a license before download. This is a one time task performed in a browser.
 
@@ -180,7 +158,7 @@ Llama 3 is a gated model. The publisher, Meta, requires acceptance of a license 
 
 > Treat the token as a password. Do not place it in documents and do not commit it to a repository.
 
-## Model download
+### Model download
 
 Perform on all 4 nodes.
 
@@ -207,7 +185,7 @@ du -sh ~/.cache/huggingface/hub/models--meta-llama--Meta-Llama-3-8B-Instruct
 
 > If a download stops partway, re-run the same `hf download` command. It resumes from the interruption point rather than restarting.
 
-## Training script
+### Training script
 
 Paste the following block on node 0. It creates a file named `train_lora_llama.py`. Each section is commented.
 
@@ -312,7 +290,7 @@ if __name__ == "__main__":
 EOF
 ```
 
-### Training settings
+### Training Variables 
 
 - `per_device_train_batch_size=1` processes one example at a time per node, keeping memory low.
 - `gradient_accumulation_steps=8` collects the learning signal from 8 examples before updating the adapter, providing the effect of a larger batch without the memory cost.
@@ -321,7 +299,7 @@ EOF
 - `gradient_checkpointing=True` saves memory by recomputing some intermediate results during the backward pass instead of storing them, trading additional computation for lower memory use.
 - `save_strategy="no"` disables intermediate saves. The finished adapter, approximately 160 MB, is saved explicitly at the end.
 
-## Script distribution
+### Script Distribution
 
 Run on node 0. Substitute the addresses and username.
 
@@ -331,7 +309,7 @@ scp ~/train_lora_llama.py USER@NODE3_IP:~/
 scp ~/train_lora_llama.py USER@NODE4_IP:~/
 ```
 
-## Launch
+### Launch
 
 The static launch style from the previous guide applies here. Every node waits until all four are present before any node begins, which avoids the partial group condition described in Troubleshooting.
 
@@ -361,7 +339,7 @@ Node 3: identical, with `--node_rank=3`.
 
 > The port setting can be confirmed before launch with `echo $NCCL_IB_HCA`, which should print `rocep1s0f1`.
 
-## Results
+### Results
 
 Only node 0 prints progress. The other three nodes run silently, which is correct.
 
@@ -407,7 +385,7 @@ The loss is a measure of how incorrect the model's answers are, so lower is bett
 
 `LoRA adapter saved to ...` confirms node 0 wrote the result to disk.
 
-### Where the trained model lives
+### Trained Model 
 
 This point is worth stating clearly, because it is a common source of confusion. The base model, approximately 16 GB, is present on all four nodes, because it was downloaded to each node. The trained adapter, approximately 160 MB, is present on node 0 only, because the script saves it only there. During training all four nodes held identical adapter values in memory, but only node 0 wrote them to disk.
 
@@ -426,7 +404,7 @@ scp -r ~/llama3-lora-dolly USER@NODE2_IP:~/
 
 Copying the adapter off node 0 is also a sensible backup, as this small folder is the entire trained result.
 
-### Adapter inspection
+### Adapter Inspection
 
 ```
 ls -lh ~/llama3-lora-dolly
@@ -434,7 +412,7 @@ ls -lh ~/llama3-lora-dolly
 
 The output should include `adapter_model.safetensors` at approximately 160 MB, along with a small configuration file and the tokenizer files. This folder is the fine-tuned result. Combined with the base model, it constitutes the trained model. Its small size is the central benefit of LoRA: the base model remains unchanged, and the custom work is a small file layered on top.
 
-## Inference
+### Inference
 
 Fine-tuning produces a file. It does not by itself provide an interactive model. Querying the model requires the inference step described in the Overview, which runs only the forward pass. In this example, inference runs on a single node with no cluster launch and no NCCL because the full Llama 3 8B model fits on one GB10. Larger models, or inference configurations that intentionally split the model across GPUs, may require NCCL and distributed launch methods.
 
@@ -510,13 +488,6 @@ Cause: the launch command was truncated during paste and began with `B_HCA=...` 
 
 Fix: set the port on its own line with `export NCCL_IB_HCA=rocep1s0f1` before running `torchrun`, so a wrapped or truncated command cannot drop it. Confirm with `echo $NCCL_IB_HCA`.
 
-### Partial group of 2 instead of 4
-
-Symptoms observed during earlier validation: a result of `1.0` instead of `6.0`, the label `nranks 2`, and errors such as `Connection was likely closed` or `RendezvousClosedError` on the nodes that joined late.
-
-Cause: with the flexible rendezvous style, the first two nodes to arrive paired, ran, and exited before the other two joined. On exit they closed the meeting point, leaving the late nodes with nothing to join.
-
-Fix: use the static launch style shown in this guide, `--master_addr` with `--master_port`. This style waits for all four nodes before any node begins, removing dependence on terminal timing.
 
 ### Hostname resolution failure
 
@@ -540,23 +511,6 @@ pkill -9 -f torchrun; pkill -9 -f train_lora
 - `NET/IB : rocep1s0f1:1 GID table changed`. The fabric renegotiated during the run. NCCL handled it and training completed.
 - The tokenizer note regarding `clean_up_tokenization_spaces`. Cosmetic.
 
-## Reusable launch pattern
-
-Every multi-node job on this cluster uses the same structure. Only the script name and the rank number change.
-
-```
-export NCCL_IB_HCA=rocep1s0f1
-export NCCL_DEBUG=WARN
-torchrun \
-  --nnodes=4 \
-  --nproc_per_node=1 \
-  --node_rank=<0 or 1 or 2 or 3> \
-  --master_addr=MASTER_IP \
-  --master_port=29500 \
-  <script>.py
-```
-
-Reliability rules: use the static style with `--master_addr` and `--master_port`; use the same `--master_addr` and `--nnodes` on every node; assign each node its own `--node_rank`; keep the PyTorch version identical on every node; and set `NCCL_IB_HCA` with `export`.
 
 ## Summary
 
