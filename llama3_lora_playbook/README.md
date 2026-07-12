@@ -23,8 +23,7 @@ Training is the process of teaching the model. It runs the same short cycle repe
 
 ![Training loop](images/training_loop.png)
 
-**Forward pass.** The model reads an input example and produces an answer. While doing so it generates intermediate results called activations, which are held in memory because they are needed later in the same step.
-
+**Forward pass.** The model reads an input example and produces an answer. While doing so it generates intermediate results called activations, which are held in memory because the backward pass needs them to compute gradients.
 **Loss calculation.** The model's answer is compared to the correct answer from the training data. The difference is reduced to a single number called the loss, which measures how wrong the answer was. A high loss means the answer was poor. A low loss means it was close.
 
 **Backward pass.** Working backward from the loss, the model computes a gradient for every trained parameter. A gradient is a value that indicates the direction to adjust that parameter so the answer is less wrong next time.
