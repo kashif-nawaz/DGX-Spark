@@ -35,7 +35,7 @@ Training is the process of teaching the model. It runs the same short cycle repe
 
 **AdamW** is the component that performs the actual parameter updates. Its name comes from Adaptive Moment Estimation with Weight Decay. In practical terms, it does two useful things beyond a naive update. First, it adapts the update size for each individual parameter based on the recent history of that parameter's gradients, so parameters that need large moves get large moves and stable parameters get small ones. Second, it applies a gentle pull toward smaller values, called weight decay, which helps prevent the model from over-fitting to the training data. To do this it keeps two bookkeeping numbers per trained parameter, which is why the optimizer is a significant consumer of memory, as shown later in the memory section.
 
-#### Pre-Training and Fine-tuning
+### Pre-Training and Fine-tuning
 A model like Llama 3 8B is built in two stages.
 **Pre-Training** Pre-training is the first and much larger stage, done by the model's creator. The model reads an enormous amount of general text and learns language, facts, and reasoning from scratch. This needs huge datasets and large clusters running for weeks, at very high cost. The result is the base model downloaded from Hugging Face. Pre-training is not repeated here; the finished base model is the starting point.
 **Fine-Tuning** Fine-tuning is the second, much smaller stage, and is what this guide performs. It takes the already pre-trained model and adjusts it on a small, focused dataset so its behaviour shifts toward a desired style or task. It is fast and inexpensive by comparison, minutes rather than weeks, because the model already knows language and only needs nudging.
@@ -45,17 +45,9 @@ In short, pre-training builds general ability from nothing, and fine-tuning spec
 Fine-tuning needs examples to learn from. This guide uses Dolly, a public dataset of about 15,000 human-written question and answer pairs, published by Databricks and general in topic. A small slice of 2,000 examples is used to keep the first run short.
 The dataset is what decides what the model learns, because the model moves toward the pattern in the examples it is shown. Since Dolly is general and the slice is small, the result is a shift in the model's answering style rather than new factual knowledge. Training on a different dataset, in the same question and answer format, is how the model would be pointed at a specific domain.
 
-#### Completion of Training 
+### Completion of Training 
 
 The five-step cycle repeats for every batch in the dataset, and the whole dataset can be passed through more than once. Each full pass over the dataset is called an epoch. As the steps accumulate, the loss trends downward, which is the visible sign that the model is improving. The model is considered trained when this process finishes, at which point its learned values are saved to disk. In this guide, that saved result is the adapter, described below.
-
-### Inference 
-
-Inference is using the finished model to answer questions. It is much simpler than training because it performs only the first step of the cycle, the forward pass. An input goes in, the model runs forward, and an answer comes out. There is no loss calculation, no backward pass, no gradient exchange, and no optimizer step, because nothing is being learned. The model is only being used.
-
-![Inference path](images/inference_path.png)
-
-This simplicity has a practical consequence. Training is heavy and benefits from all four nodes working together. Inference is light and runs on a single node. Because Llama 3 8B fits comfortably on one GB10, inference here uses one node, one GPU, and no collective communication at all. A collective such as all-gather or all-reduce would only be needed if a model were too large for a single GPU and had to be split across several, which is not the case here.
 
 ### Low-Rank Adaptation (LoRA)
 
@@ -88,9 +80,17 @@ LoRA removes almost all of this cost. Because the original parameters are frozen
 
 This produces a useful simplification. Because the workload fits on one node, no model-splitting technique is required. The same method from the previous guide applies: Distributed Data Parallel (DDP), in which every node holds a full copy of the frozen model plus its own copy of the small adapter, and the nodes exchange only the small adapter updates. This is the largest simplification for a first production run.
 
-## End-to-End Workflow
+### Inference 
 
-Putting the two activities together, the workflow has five stages. The first three prepare the dataset  and train the model. The last two stages produce and use the trained model.
+Inference is using the finished model to answer questions. It is much simpler than training because it performs only the first step of the cycle, the forward pass. An input goes in, the model runs forward, and an answer comes out. There is no loss calculation, no backward pass, no gradient exchange, and no optimizer step, because nothing is being learned. The model is only being used.
+
+![Inference path](images/inference_path.png)
+
+This simplicity has a practical consequence. Training is heavy and benefits from all four nodes working together. Inference is light and runs on a single node. Because Llama 3 8B fits comfortably on one GB10, inference here uses one node, one GPU, and no collective communication at all. A collective such as all-gather or all-reduce would only be needed if a model were too large for a single GPU and had to be split across several, which is not the case here.
+
+### End-to-End Workflow
+
+The two activities combine into a single workflow of five stages. The first three set up the environment, download the model, and train it. The last two save and use the trained model.
 
 ![Pipeline overview](images/pipeline.png)
 
